@@ -1,0 +1,11 @@
+**/target/
+.runtime/
+runtime/
+artifacts/
+.env
+*.p12
+*.jks
+*.log
+*.pid
+.DS_Store
+__pycache__/

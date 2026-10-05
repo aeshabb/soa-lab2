@@ -1,0 +1,482 @@
+openapi: 3.0.3
+
+info:
+  title: Booking Service API
+  version: 1.0.0
+  description: |
+    Второй веб-сервис лабораторной работы №1 по дисциплине
+    «Сервис-ориентированная архитектура».
+
+    Сервис расположен на URL `/booking` и не хранит собственного состояния:
+    каждая его операция реализована через вызовы REST API первого сервиса
+    (`Ticket Service`). Сервис предоставляет две дополнительные операции,
+    размещённые на отдельных URL:
+
+    * `POST /booking/sell/vip/{ticket-id}/{person-id}` — продажа VIP-копии билета;
+    * `POST /booking/person/{person-id}/cancel` — отмена всех бронирований человека.
+
+    Информация передаётся в формате `application/json`, все параметры операций
+    передаются в URL запроса. Поле `creationDate` возвращается в человекочитаемом
+    формате `dd.MM.yyyy HH:mm:ss`.
+
+    **Взаимодействие с первым сервисом.** Для выполнения операций `Booking Service`
+    обращается к `Ticket Service`: читает билет по ИД (`GET /tickets/{id}`),
+    создаёт новый элемент (`POST /tickets`) и обновляет существующие
+    (`PUT /tickets/{id}`). Если первый сервис недоступен или возвращает ошибку,
+    `Booking Service` отвечает кодом `502 Bad Gateway`.
+
+servers:
+  - url: /
+    description: Тот же адрес, с которого открыта документация
+
+tags:
+  - name: booking
+    description: Операции бронирования, реализуемые через вызовы API сервиса Ticket Service
+
+paths:
+
+  /booking/sell/vip/{ticket-id}/{person-id}:
+    post:
+      tags: [booking]
+      operationId: sellVipTicket
+      summary: Продать VIP-копию указанного билета указанному человеку
+      description: |
+        Копирует билет с идентификатором `ticket-id`, создавая в коллекции первого
+        сервиса новый элемент с теми же значениями полей `name`, `coordinates`,
+        `comment` и `venue`, но с категорией `type = VIP` и **удвоенной** ценой
+        (`price` исходного билета, умноженная на 2). Созданный билет закрепляется
+        за человеком с идентификатором `person-id` (`personId = person-id`).
+
+        Исходный билет не изменяется. Поля `id`, `creationDate` и `venue.id`
+        нового билета генерируются первым сервисом автоматически.
+
+        Последовательность вызовов первого сервиса:
+        `GET /tickets/{ticket-id}` → `POST /tickets`.
+
+        Если удвоенная цена выходит за пределы допустимых значений типа `float`,
+        операция отклоняется с кодом `422 Unprocessable Entity`.
+      parameters:
+        - name: ticket-id
+          in: path
+          required: true
+          description: Идентификатор копируемого билета, целое число больше 0
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+          example: 42
+        - name: person-id
+          in: path
+          required: true
+          description: Идентификатор человека, которому продаётся билет, целое число больше 0
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+          example: 7
+      responses:
+        '201':
+          description: VIP-копия билета успешно создана и продана
+          headers:
+            Location:
+              description: URI созданного билета в коллекции первого сервиса
+              schema:
+                type: string
+                example: /tickets/43
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: Билет с указанным идентификатором не найден в коллекции первого сервиса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                timestamp: 21.09.2026 14:31:02
+                status: 404
+                error: Not Found
+                message: Билет с id = 42 не найден в коллекции первого сервиса
+                path: /booking/sell/vip/42/7
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+        '504':
+          $ref: '#/components/responses/GatewayTimeout'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        default:
+          $ref: '#/components/responses/DefaultError'
+
+  /booking/person/{person-id}/cancel:
+    post:
+      tags: [booking]
+      operationId: cancelPersonBookings
+      summary: Отменить все бронирования указанного человека
+      description: |
+        Отменяет все бронирования человека с идентификатором `person-id`:
+        находит в коллекции первого сервиса все билеты, у которых
+        `personId = person-id`, и удаляет идентификатор человека из этих билетов
+        (устанавливает `personId = null`). Сами билеты остаются в коллекции
+        и становятся свободными.
+
+        Операция идемпотентна: повторный вызов для того же человека вернёт
+        `cancelledCount = 0` и пустой список `cancelledTicketIds`.
+
+        Последовательность вызовов первого сервиса:
+        `GET /tickets?personId={person-id}` → `PUT /tickets/{id}`
+        для каждого найденного билета.
+      parameters:
+        - name: person-id
+          in: path
+          required: true
+          description: Идентификатор человека, бронирования которого отменяются, целое число больше 0
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+          example: 7
+      responses:
+        '200':
+          description: Бронирования отменены, возвращается отчёт об операции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancellationResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+        '504':
+          $ref: '#/components/responses/GatewayTimeout'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        default:
+          $ref: '#/components/responses/DefaultError'
+
+components:
+
+  schemas:
+
+    CancellationResult:
+      type: object
+      description: Отчёт об отмене бронирований человека
+      required: [personId, cancelledCount, cancelledTicketIds]
+      properties:
+        personId:
+          type: integer
+          format: int32
+          minimum: 1
+          description: Идентификатор человека, бронирования которого были отменены
+          example: 7
+        cancelledCount:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Количество билетов, освобождённых в результате операции
+          example: 3
+        cancelledTicketIds:
+          type: array
+          description: Идентификаторы билетов, из которых был удалён идентификатор человека
+          items:
+            type: integer
+            format: int32
+            minimum: 1
+          example: [11, 17, 42]
+
+    Ticket:
+      type: object
+      description: |
+        Объект коллекции первого сервиса — билет.
+        Схема идентична схеме `Ticket` из спецификации `Ticket Service API`.
+      required: [id, name, coordinates, creationDate, price, type, venue]
+      properties:
+        id:
+          type: integer
+          format: int32
+          minimum: 1
+          readOnly: true
+          description: Уникальный идентификатор, генерируется автоматически, значение больше 0
+          example: 43
+        name:
+          type: string
+          minLength: 1
+          description: Название билета, не может быть null и не может быть пустой строкой
+          example: Concert of the Year
+        coordinates:
+          $ref: '#/components/schemas/Coordinates'
+        creationDate:
+          type: string
+          readOnly: true
+          pattern: '^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}:\d{2}$'
+          description: |
+            Дата и время создания элемента, генерируется автоматически.
+            Человекочитаемый формат `dd.MM.yyyy HH:mm:ss`.
+          example: 21.09.2026 14:35:07
+        price:
+          type: number
+          format: float
+          minimum: 0
+          exclusiveMinimum: true
+          description: Цена билета, строго больше 0. У VIP-копии — удвоенная цена исходного билета
+          example: 3001.0
+        comment:
+          type: string
+          nullable: true
+          description: Комментарий к билету, может быть null
+          example: Front row seats
+        type:
+          $ref: '#/components/schemas/TicketType'
+        venue:
+          $ref: '#/components/schemas/Venue'
+        personId:
+          type: integer
+          format: int32
+          minimum: 1
+          nullable: true
+          description: Идентификатор человека, забронировавшего билет, может быть null
+          example: 7
+
+    Coordinates:
+      type: object
+      description: Координаты билета, поле не может быть null
+      required: [x, y]
+      properties:
+        x:
+          type: integer
+          format: int32
+          description: Координата x
+          example: 15
+        y:
+          type: number
+          format: double
+          description: Координата y
+          example: -42.75
+
+    Venue:
+      type: object
+      description: Место проведения, поле не может быть null
+      required: [id, name, capacity]
+      properties:
+        id:
+          type: integer
+          format: int32
+          minimum: 1
+          readOnly: true
+          description: Уникальный идентификатор места, генерируется автоматически, значение больше 0
+          example: 4
+        name:
+          type: string
+          minLength: 1
+          description: Название места, не может быть null и не может быть пустой строкой
+          example: Ice Palace
+        capacity:
+          type: integer
+          format: int32
+          minimum: 1
+          description: Вместимость, не может быть null, значение больше 0
+          example: 12000
+        type:
+          $ref: '#/components/schemas/VenueType'
+
+    TicketType:
+      type: string
+      description: Тип билета, поле не может быть null
+      enum: [VIP, USUAL, BUDGETARY, CHEAP]
+      example: VIP
+
+    VenueType:
+      type: string
+      nullable: true
+      description: Тип места проведения, поле может быть null
+      enum: [BAR, CINEMA, MALL]
+      example: CINEMA
+
+    Violation:
+      type: object
+      description: Описание одного нарушения ограничения целостности
+      required: [field, message]
+      properties:
+        field:
+          type: string
+          description: Имя поля, значение которого нарушает ограничение
+          example: price
+        message:
+          type: string
+          description: Описание нарушенного ограничения
+          example: значение поля должно быть больше 0
+        rejectedValue:
+          type: string
+          nullable: true
+          description: Отвергнутое значение поля
+          example: '-100.0'
+
+    Error:
+      type: object
+      description: Описание ошибки, возвращаемое сервисом
+      required: [timestamp, status, error, message, path]
+      properties:
+        timestamp:
+          type: string
+          pattern: '^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}:\d{2}$'
+          description: Момент возникновения ошибки в формате `dd.MM.yyyy HH:mm:ss`
+          example: 21.09.2026 14:36:11
+        status:
+          type: integer
+          format: int32
+          description: HTTP-код ответа
+          example: 404
+        error:
+          type: string
+          description: Краткое наименование ошибки
+          example: Not Found
+        message:
+          type: string
+          description: Описание причины ошибки
+          example: Билет с id = 42 не найден
+        path:
+          type: string
+          description: URI запроса, вызвавшего ошибку
+          example: /booking/sell/vip/42/7
+        violations:
+          type: array
+          description: Перечень нарушенных ограничений целостности
+          items:
+            $ref: '#/components/schemas/Violation'
+
+  responses:
+
+    BadRequest:
+      description: |
+        Некорректный запрос: значения `ticket-id` или `person-id` не являются
+        целыми числами больше 0.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            timestamp: 21.09.2026 14:31:02
+            status: 400
+            error: Bad Request
+            message: Значение person-id должно быть целым числом больше 0
+            path: /booking/sell/vip/42/abc
+
+    UnprocessableEntity:
+      description: |
+        Результат операции нарушает ограничения целостности объекта `Ticket`
+        (например, удвоенная цена выходит за границы допустимых значений).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            timestamp: 21.09.2026 14:31:02
+            status: 422
+            error: Unprocessable Entity
+            message: Удвоенная цена билета выходит за пределы допустимых значений
+            path: /booking/sell/vip/42/7
+            violations:
+              - field: price
+                message: значение поля должно быть больше 0
+                rejectedValue: '3.4E38'
+
+    BadGateway:
+      description: |
+        Первый веб-сервис (`Ticket Service`) недоступен или вернул некорректный ответ,
+        поэтому операция не может быть выполнена.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            timestamp: 21.09.2026 14:31:02
+            status: 502
+            error: Bad Gateway
+            message: Ticket Service вернул некорректный ответ
+            path: /booking/sell/vip/42/7
+
+    ServiceUnavailable:
+      description: |
+        Сервис временно недоступен: не развёрнута реализация операции,
+        идёт обслуживание или недоступно хранилище коллекции.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            timestamp: 21.09.2026 14:31:02
+            status: 503
+            error: Service Unavailable
+            message: Сервис временно недоступен
+            path: /booking/person/7/cancel
+
+    InternalServerError:
+      description: Внутренняя ошибка сервиса
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            timestamp: 21.09.2026 14:31:02
+            status: 500
+            error: Internal Server Error
+            message: Внутренняя ошибка сервиса
+            path: /booking/person/7/cancel
+
+    Conflict:
+      description: |
+        Операция конфликтует с текущим состоянием данных первого сервиса: билет был
+        изменён или удалён параллельным запросом, поэтому бронирование не может быть
+        выполнено или отменено.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            timestamp: 21.09.2026 14:31:02
+            status: 409
+            error: Conflict
+            message: Билет с id = 42 был изменён другим запросом
+            path: /booking/sell/vip/42/7
+
+    GatewayTimeout:
+      description: |
+        Первый веб-сервис (`Ticket Service`) не ответил за отведённое время,
+        поэтому результат операции неизвестен.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            timestamp: 21.09.2026 14:31:02
+            status: 504
+            error: Gateway Timeout
+            message: Ticket Service не ответил за отведённое время
+            path: /booking/person/7/cancel
+
+    DefaultError:
+      description: |
+        Любая иная ошибка, не описанная отдельным кодом ответа. Тело ответа
+        содержит описание ошибки в том же формате, что и остальные ответы сервиса.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            timestamp: 21.09.2026 14:31:02
+            status: 503
+            error: Service Unavailable
+            message: Сервис временно недоступен
+            path: /booking/person/7/cancel

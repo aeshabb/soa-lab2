@@ -1,0 +1,1039 @@
+openapi: 3.0.3
+
+info:
+  title: Ticket Service API
+  version: 1.0.0
+  description: |
+    Первый веб-сервис лабораторной работы №1 по дисциплине «Сервис-ориентированная архитектура».
+
+    Сервис управляет коллекцией объектов класса `Ticket` и предоставляет RESTful API:
+
+    * базовый набор CRUD-операций над элементами коллекции;
+    * выборку массива элементов с **фильтрацией по любой комбинации полей**,
+      **сортировкой по любой комбинации полей** и **постраничным выводом**;
+    * три дополнительные операции, размещённые на отдельных URL
+      (удаление по цене, среднее значение цены, минимальный комментарий).
+
+    Все параметры операций передаются в URL запроса (path- и query-параметры),
+    тела запросов и ответов передаются в формате `application/json`.
+
+    **Формат даты и времени.** Поле `creationDate` возвращается в человекочитаемом
+    виде `dd.MM.yyyy HH:mm:ss` (например, `21.09.2026 14:30:15`), время — локальное
+    время сервера.
+
+servers:
+  - url: /
+    description: Тот же адрес, с которого открыта документация
+
+tags:
+  - name: tickets
+    description: Базовые операции над коллекцией объектов `Ticket`
+  - name: tickets-extra
+    description: Дополнительные операции над коллекцией, размещённые на отдельных URL
+
+paths:
+
+  /tickets:
+    get:
+      tags: [tickets]
+      operationId: getTickets
+      summary: Получить массив элементов коллекции
+      description: |
+        Возвращает массив объектов `Ticket` с поддержкой фильтрации, сортировки
+        и постраничного вывода. Все параметры выборки передаются в строке запроса.
+
+        **Фильтрация** задаётся отдельным параметром на каждое поле класса.
+        Параметры можно указывать в любом сочетании, условия объединяются
+        логическим «И». Имя параметра совпадает с именем поля; вложенные поля
+        записываются слитно (`venueName`, `coordinateX`).
+
+        Для числовых полей и даты дополнительно доступны границы диапазона
+        с суффиксами `From` и `To` — обе границы включаются в выборку.
+        Для строковых полей доступен поиск подстроки с суффиксом `Contains`
+        (без учёта регистра).
+
+        Пример: `?type=VIP&priceFrom=1000&priceTo=5000&venueNameContains=arena`
+
+        **Сортировка** задаётся параметром `sort` — списком имён полей через запятую.
+        Префикс `-` означает сортировку по убыванию, отсутствие префикса — по возрастанию.
+        Поля применяются в порядке их перечисления.
+
+        Пример: `?sort=-price,name`
+
+        **Постраничный вывод** задаётся параметрами `page` (порядковый номер страницы,
+        нумерация с 1) и `size` (размер страницы).
+      parameters:
+        - $ref: '#/components/parameters/FilterId'
+        - $ref: '#/components/parameters/FilterName'
+        - $ref: '#/components/parameters/FilterNameContains'
+        - $ref: '#/components/parameters/FilterComment'
+        - $ref: '#/components/parameters/FilterCommentContains'
+        - $ref: '#/components/parameters/FilterType'
+        - $ref: '#/components/parameters/FilterPrice'
+        - $ref: '#/components/parameters/FilterPriceFrom'
+        - $ref: '#/components/parameters/FilterPriceTo'
+        - $ref: '#/components/parameters/FilterCreationDate'
+        - $ref: '#/components/parameters/FilterCreationDateFrom'
+        - $ref: '#/components/parameters/FilterCreationDateTo'
+        - $ref: '#/components/parameters/FilterCoordinateX'
+        - $ref: '#/components/parameters/FilterCoordinateY'
+        - $ref: '#/components/parameters/FilterVenueId'
+        - $ref: '#/components/parameters/FilterVenueName'
+        - $ref: '#/components/parameters/FilterVenueNameContains'
+        - $ref: '#/components/parameters/FilterVenueCapacity'
+        - $ref: '#/components/parameters/FilterVenueCapacityFrom'
+        - $ref: '#/components/parameters/FilterVenueCapacityTo'
+        - $ref: '#/components/parameters/FilterVenueType'
+        - $ref: '#/components/parameters/FilterPersonId'
+        - $ref: '#/components/parameters/SortParam'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+      responses:
+        '200':
+          description: Страница выборки успешно сформирована
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        default:
+          $ref: '#/components/responses/DefaultError'
+
+    post:
+      tags: [tickets]
+      operationId: createTicket
+      summary: Добавить новый элемент в коллекцию
+      description: |
+        Создаёт новый объект `Ticket`. Поля `id`, `creationDate` и `venue.id`
+        генерируются сервисом автоматически и в теле запроса не передаются.
+
+        При нарушении ограничений целостности, заданных на уровне класса
+        (пустое имя, `price <= 0`, отсутствие обязательных полей, `venue.capacity <= 0`
+        и т.п.), возвращается код `422 Unprocessable Entity` с перечнем нарушений.
+      requestBody:
+        required: true
+        description: Данные создаваемого билета
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TicketInput'
+      responses:
+        '201':
+          description: Элемент успешно создан
+          headers:
+            Location:
+              description: URI созданного элемента коллекции
+              schema:
+                type: string
+                example: /tickets/42
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        default:
+          $ref: '#/components/responses/DefaultError'
+
+  /tickets/{id}:
+    parameters:
+      - $ref: '#/components/parameters/TicketIdParam'
+
+    get:
+      tags: [tickets]
+      operationId: getTicketById
+      summary: Получить элемент коллекции по ИД
+      description: Возвращает объект `Ticket` с указанным идентификатором.
+      responses:
+        '200':
+          description: Элемент найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        default:
+          $ref: '#/components/responses/DefaultError'
+
+    put:
+      tags: [tickets]
+      operationId: updateTicket
+      summary: Обновить элемент коллекции
+      description: |
+        Полностью заменяет содержимое объекта `Ticket` с указанным идентификатором.
+        Значения полей `id` и `creationDate` не изменяются: они сгенерированы
+        автоматически при создании элемента.
+
+        Если за время обработки запроса билет был изменён или удалён другим запросом,
+        обновление отклоняется с кодом `409 Conflict`.
+      requestBody:
+        required: true
+        description: Новое состояние билета
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TicketInput'
+      responses:
+        '200':
+          description: Элемент успешно обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        default:
+          $ref: '#/components/responses/DefaultError'
+
+    delete:
+      tags: [tickets]
+      operationId: deleteTicket
+      summary: Удалить элемент коллекции
+      description: |
+        Удаляет объект `Ticket` с указанным идентификатором вместе со связанным объектом `Venue`.
+
+        Забронированный билет (`personId != null`) удалить нельзя: возвращается
+        `409 Conflict`. Чтобы удалить такой билет, нужно сначала отменить бронирование.
+      responses:
+        '204':
+          description: Элемент успешно удалён, тело ответа отсутствует
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        default:
+          $ref: '#/components/responses/DefaultError'
+
+  /tickets/price/{price}:
+    delete:
+      tags: [tickets-extra]
+      operationId: deleteTicketByPrice
+      summary: Удалить один (любой) билет с заданной ценой
+      description: |
+        Удаляет **один произвольный** объект коллекции, значение поля `price`
+        которого эквивалентно заданному. Если таких объектов несколько, удаляется
+        любой из них; какой именно — не определено. Если подходящих объектов нет,
+        возвращается `404 Not Found`.
+
+        Удаляется только свободный билет. Если все билеты с указанной ценой
+        забронированы (`personId != null`), возвращается `409 Conflict`.
+      parameters:
+        - name: price
+          in: path
+          required: true
+          description: Значение поля `price`, по которому выбирается удаляемый билет
+          schema:
+            type: number
+            format: float
+            minimum: 0
+            exclusiveMinimum: true
+          example: 1500.5
+      responses:
+        '200':
+          description: Билет удалён, возвращается удалённый объект
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: Билет с указанной ценой не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                timestamp: 21.09.2026 14:31:02
+                status: 404
+                error: Not Found
+                message: Билет с ценой 1500.5 не найден
+                path: /tickets/price/1500.5
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        default:
+          $ref: '#/components/responses/DefaultError'
+
+  /tickets/price/average:
+    get:
+      tags: [tickets-extra]
+      operationId: getAveragePrice
+      summary: Рассчитать среднее значение поля price
+      description: |
+        Вычисляет среднее арифметическое значение поля `price` по всем объектам коллекции.
+        Если коллекция пуста, возвращается `average = 0` и `count = 0`.
+      responses:
+        '200':
+          description: Среднее значение успешно рассчитано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AveragePrice'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        default:
+          $ref: '#/components/responses/DefaultError'
+
+  /tickets/comment/min:
+    get:
+      tags: [tickets-extra]
+      operationId: getTicketWithMinComment
+      summary: Вернуть билет с минимальным значением поля comment
+      description: |
+        Возвращает **один произвольный** объект коллекции, значение поля `comment`
+        которого является минимальным в лексикографическом порядке. Объекты
+        с `comment = null` в сравнении не участвуют. Если подходящих объектов нет
+        (коллекция пуста или у всех билетов `comment = null`), возвращается `404 Not Found`.
+      responses:
+        '200':
+          description: Билет с минимальным комментарием найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+        '404':
+          description: В коллекции нет билетов с непустым полем `comment`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                timestamp: 21.09.2026 14:31:02
+                status: 404
+                error: Not Found
+                message: В коллекции нет билетов с непустым полем comment
+                path: /tickets/comment/min
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+        default:
+          $ref: '#/components/responses/DefaultError'
+
+components:
+
+  parameters:
+
+    TicketIdParam:
+      name: id
+      in: path
+      required: true
+      description: Идентификатор билета (целое число больше 0)
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+      example: 42
+
+    FilterId:
+      name: id
+      in: query
+      required: false
+      description: Фильтр по полю `id` — точное значение
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+      example: 42
+
+    FilterName:
+      name: name
+      in: query
+      required: false
+      description: Фильтр по полю `name` — полное совпадение
+      schema:
+        type: string
+        minLength: 1
+      example: Concert of the Year
+
+    FilterNameContains:
+      name: nameContains
+      in: query
+      required: false
+      description: Фильтр по полю `name` — вхождение подстроки без учёта регистра
+      schema:
+        type: string
+        minLength: 1
+      example: concert
+
+    FilterComment:
+      name: comment
+      in: query
+      required: false
+      description: Фильтр по полю `comment` — полное совпадение
+      schema:
+        type: string
+      example: Front row seats
+
+    FilterCommentContains:
+      name: commentContains
+      in: query
+      required: false
+      description: Фильтр по полю `comment` — вхождение подстроки без учёта регистра
+      schema:
+        type: string
+      example: front
+
+    FilterType:
+      name: type
+      in: query
+      required: false
+      description: Фильтр по полю `type` — точное значение
+      schema:
+        $ref: '#/components/schemas/TicketType'
+
+    FilterPrice:
+      name: price
+      in: query
+      required: false
+      description: Фильтр по полю `price` — точное значение
+      schema:
+        type: number
+        format: float
+        minimum: 0
+        exclusiveMinimum: true
+      example: 1500.5
+
+    FilterPriceFrom:
+      name: priceFrom
+      in: query
+      required: false
+      description: Нижняя граница поля `price`, включительно
+      schema:
+        type: number
+        format: float
+        minimum: 0
+        exclusiveMinimum: true
+      example: 1000
+
+    FilterPriceTo:
+      name: priceTo
+      in: query
+      required: false
+      description: Верхняя граница поля `price`, включительно
+      schema:
+        type: number
+        format: float
+        minimum: 0
+        exclusiveMinimum: true
+      example: 5000
+
+    FilterCreationDate:
+      name: creationDate
+      in: query
+      required: false
+      description: Фильтр по полю `creationDate` — точное значение в формате `dd.MM.yyyy HH:mm:ss`
+      schema:
+        type: string
+        pattern: '^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}:\d{2}$'
+      example: 21.09.2026 14:30:15
+
+    FilterCreationDateFrom:
+      name: creationDateFrom
+      in: query
+      required: false
+      description: Нижняя граница поля `creationDate`, включительно
+      schema:
+        type: string
+        pattern: '^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}:\d{2}$'
+      example: 01.09.2026 00:00:00
+
+    FilterCreationDateTo:
+      name: creationDateTo
+      in: query
+      required: false
+      description: Верхняя граница поля `creationDate`, включительно
+      schema:
+        type: string
+        pattern: '^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}:\d{2}$'
+      example: 30.09.2026 23:59:59
+
+    FilterCoordinateX:
+      name: coordinateX
+      in: query
+      required: false
+      description: Фильтр по полю `coordinates.x` — точное значение
+      schema:
+        type: integer
+        format: int32
+      example: 15
+
+    FilterCoordinateY:
+      name: coordinateY
+      in: query
+      required: false
+      description: Фильтр по полю `coordinates.y` — точное значение
+      schema:
+        type: number
+        format: double
+      example: -42.75
+
+    FilterVenueId:
+      name: venueId
+      in: query
+      required: false
+      description: Фильтр по полю `venue.id` — точное значение
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+      example: 3
+
+    FilterVenueName:
+      name: venueName
+      in: query
+      required: false
+      description: Фильтр по полю `venue.name` — полное совпадение
+      schema:
+        type: string
+        minLength: 1
+      example: Ice Palace
+
+    FilterVenueNameContains:
+      name: venueNameContains
+      in: query
+      required: false
+      description: Фильтр по полю `venue.name` — вхождение подстроки без учёта регистра
+      schema:
+        type: string
+        minLength: 1
+      example: palace
+
+    FilterVenueCapacity:
+      name: venueCapacity
+      in: query
+      required: false
+      description: Фильтр по полю `venue.capacity` — точное значение
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+      example: 12000
+
+    FilterVenueCapacityFrom:
+      name: venueCapacityFrom
+      in: query
+      required: false
+      description: Нижняя граница поля `venue.capacity`, включительно
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+      example: 500
+
+    FilterVenueCapacityTo:
+      name: venueCapacityTo
+      in: query
+      required: false
+      description: Верхняя граница поля `venue.capacity`, включительно
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+      example: 20000
+
+    FilterVenueType:
+      name: venueType
+      in: query
+      required: false
+      description: Фильтр по полю `venue.type` — точное значение
+      schema:
+        $ref: '#/components/schemas/VenueType'
+
+    FilterPersonId:
+      name: personId
+      in: query
+      required: false
+      description: Фильтр по полю `personId` — точное значение; билеты без брони этим фильтром не возвращаются
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+      example: 7
+
+    SortParam:
+      name: sort
+      in: query
+      required: false
+      description: |
+        Список полей сортировки через запятую. Префикс `-` — сортировка по убыванию,
+        без префикса — по возрастанию. Поля применяются в порядке перечисления.
+        Имена полей те же, что и у параметров фильтрации: `id`, `name`, `coordinateX`,
+        `coordinateY`, `creationDate`, `price`, `comment`, `type`, `venueId`,
+        `venueName`, `venueCapacity`, `venueType`, `personId`.
+      style: form
+      explode: false
+      schema:
+        type: array
+        items:
+          type: string
+          pattern: '^-?(id|name|coordinateX|coordinateY|creationDate|price|comment|type|venueId|venueName|venueCapacity|venueType|personId)$'
+      example: ['-price', 'name']
+
+    PageParam:
+      name: page
+      in: query
+      required: false
+      description: Порядковый номер выводимой страницы, нумерация начинается с 1
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+        default: 1
+      example: 1
+
+    SizeParam:
+      name: size
+      in: query
+      required: false
+      description: Размер страницы — количество элементов в выборке
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+        maximum: 100
+        default: 20
+      example: 20
+
+  schemas:
+
+    Ticket:
+      type: object
+      description: Объект коллекции — билет
+      required: [id, name, coordinates, creationDate, price, type, venue]
+      properties:
+        id:
+          type: integer
+          format: int32
+          minimum: 1
+          readOnly: true
+          description: Уникальный идентификатор, генерируется автоматически, значение больше 0
+          example: 42
+        name:
+          type: string
+          minLength: 1
+          description: Название билета, не может быть null и не может быть пустой строкой
+          example: Concert of the Year
+        coordinates:
+          $ref: '#/components/schemas/Coordinates'
+        creationDate:
+          type: string
+          readOnly: true
+          pattern: '^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}:\d{2}$'
+          description: |
+            Дата и время создания элемента, генерируется автоматически.
+            Человекочитаемый формат `dd.MM.yyyy HH:mm:ss`.
+          example: 21.09.2026 14:30:15
+        price:
+          type: number
+          format: float
+          minimum: 0
+          exclusiveMinimum: true
+          description: Цена билета, строго больше 0
+          example: 1500.5
+        comment:
+          type: string
+          nullable: true
+          description: Комментарий к билету, может быть null
+          example: Front row seats
+        type:
+          $ref: '#/components/schemas/TicketType'
+        venue:
+          $ref: '#/components/schemas/Venue'
+        personId:
+          type: integer
+          format: int32
+          minimum: 1
+          nullable: true
+          description: |
+            Идентификатор человека, забронировавшего билет. Может быть null —
+            билет никем не забронирован. Поле используется вторым веб-сервисом
+            (Booking Service) для операций продажи и отмены бронирований.
+          example: 7
+
+    TicketInput:
+      type: object
+      description: |
+        Данные билета, передаваемые при создании и обновлении.
+        Поля `id`, `creationDate` и `venue.id` генерируются сервисом автоматически
+        и в теле запроса не принимаются.
+      required: [name, coordinates, price, type, venue]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Название билета, не может быть null и не может быть пустой строкой
+          example: Concert of the Year
+        coordinates:
+          $ref: '#/components/schemas/Coordinates'
+        price:
+          type: number
+          format: float
+          minimum: 0
+          exclusiveMinimum: true
+          description: Цена билета, строго больше 0
+          example: 1500.5
+        comment:
+          type: string
+          nullable: true
+          description: Комментарий к билету, может быть null
+          example: Front row seats
+        type:
+          $ref: '#/components/schemas/TicketType'
+        venue:
+          $ref: '#/components/schemas/VenueInput'
+        personId:
+          type: integer
+          format: int32
+          minimum: 1
+          nullable: true
+          description: Идентификатор человека, забронировавшего билет, может быть null
+          example: 7
+
+    Coordinates:
+      type: object
+      description: Координаты билета, поле не может быть null
+      required: [x, y]
+      properties:
+        x:
+          type: integer
+          format: int32
+          description: Координата x
+          example: 15
+        y:
+          type: number
+          format: double
+          description: Координата y
+          example: -42.75
+
+    Venue:
+      type: object
+      description: Место проведения, поле не может быть null
+      required: [id, name, capacity]
+      properties:
+        id:
+          type: integer
+          format: int32
+          minimum: 1
+          readOnly: true
+          description: Уникальный идентификатор места, генерируется автоматически, значение больше 0
+          example: 3
+        name:
+          type: string
+          minLength: 1
+          description: Название места, не может быть null и не может быть пустой строкой
+          example: Ice Palace
+        capacity:
+          type: integer
+          format: int32
+          minimum: 1
+          description: Вместимость, не может быть null, значение больше 0
+          example: 12000
+        type:
+          $ref: '#/components/schemas/VenueType'
+
+    VenueInput:
+      type: object
+      description: Данные места проведения; поле `id` генерируется сервисом автоматически
+      required: [name, capacity]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Название места, не может быть null и не может быть пустой строкой
+          example: Ice Palace
+        capacity:
+          type: integer
+          format: int32
+          minimum: 1
+          description: Вместимость, не может быть null, значение больше 0
+          example: 12000
+        type:
+          $ref: '#/components/schemas/VenueType'
+
+    TicketType:
+      type: string
+      description: Тип билета, поле не может быть null
+      enum: [VIP, USUAL, BUDGETARY, CHEAP]
+      example: VIP
+
+    VenueType:
+      type: string
+      nullable: true
+      description: Тип места проведения, поле может быть null
+      enum: [BAR, CINEMA, MALL]
+      example: CINEMA
+
+    TicketPage:
+      type: object
+      description: Страница выборки элементов коллекции
+      required: [items, page, size, totalElements, totalPages]
+      properties:
+        items:
+          type: array
+          description: Элементы текущей страницы
+          items:
+            $ref: '#/components/schemas/Ticket'
+        page:
+          type: integer
+          format: int32
+          minimum: 1
+          description: Порядковый номер текущей страницы
+          example: 1
+        size:
+          type: integer
+          format: int32
+          minimum: 1
+          description: Размер страницы
+          example: 20
+        totalElements:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Общее количество элементов, удовлетворяющих условиям фильтрации
+          example: 137
+        totalPages:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Общее количество страниц выборки
+          example: 7
+
+    AveragePrice:
+      type: object
+      description: Результат расчёта среднего значения поля `price`
+      required: [average, count]
+      properties:
+        average:
+          type: number
+          format: double
+          minimum: 0
+          description: Среднее значение поля `price` по всем объектам коллекции
+          example: 2431.75
+        count:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Количество объектов, участвовавших в расчёте
+          example: 137
+
+    Violation:
+      type: object
+      description: Описание одного нарушения ограничения целостности
+      required: [field, message]
+      properties:
+        field:
+          type: string
+          description: Имя поля, значение которого нарушает ограничение
+          example: price
+        message:
+          type: string
+          description: Описание нарушенного ограничения
+          example: значение поля должно быть больше 0
+        rejectedValue:
+          type: string
+          nullable: true
+          description: Отвергнутое значение поля
+          example: '-100.0'
+
+    Error:
+      type: object
+      description: Описание ошибки, возвращаемое сервисом
+      required: [timestamp, status, error, message, path]
+      properties:
+        timestamp:
+          type: string
+          pattern: '^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}:\d{2}$'
+          description: Момент возникновения ошибки в формате `dd.MM.yyyy HH:mm:ss`
+          example: 21.09.2026 14:31:02
+        status:
+          type: integer
+          format: int32
+          description: HTTP-код ответа
+          example: 422
+        error:
+          type: string
+          description: Краткое наименование ошибки
+          example: Unprocessable Entity
+        message:
+          type: string
+          description: Описание причины ошибки
+          example: Нарушены ограничения целостности объекта Ticket
+        path:
+          type: string
+          description: URI запроса, вызвавшего ошибку
+          example: /tickets
+        violations:
+          type: array
+          description: Перечень нарушенных ограничений целостности
+          items:
+            $ref: '#/components/schemas/Violation'
+
+  responses:
+
+    BadRequest:
+      description: |
+        Некорректный запрос: неверный синтаксис параметров фильтрации или сортировки,
+        недопустимое имя поля, нечисловой идентификатор, некорректный JSON.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            timestamp: 21.09.2026 14:31:02
+            status: 400
+            error: Bad Request
+            message: "Недопустимое имя поля в параметре sort: prise"
+            path: /tickets
+
+    NotFound:
+      description: Элемент коллекции с указанным идентификатором не найден
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            timestamp: 21.09.2026 14:31:02
+            status: 404
+            error: Not Found
+            message: Билет с id = 42 не найден
+            path: /tickets/42
+
+    UnprocessableEntity:
+      description: |
+        Переданные данные нарушают ограничения целостности, заданные на уровне класса
+        (`name` пустое, `price <= 0`, `venue.capacity <= 0`, отсутствует обязательное поле и т.п.).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            timestamp: 21.09.2026 14:31:02
+            status: 422
+            error: Unprocessable Entity
+            message: Нарушены ограничения целостности объекта Ticket
+            path: /tickets
+            violations:
+              - field: price
+                message: значение поля должно быть больше 0
+                rejectedValue: '-100.0'
+
+    ServiceUnavailable:
+      description: |
+        Сервис временно недоступен: не развёрнута реализация операции,
+        идёт обслуживание или недоступно хранилище коллекции.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            timestamp: 21.09.2026 14:31:02
+            status: 503
+            error: Service Unavailable
+            message: Сервис временно недоступен
+            path: /tickets
+
+    InternalServerError:
+      description: Внутренняя ошибка сервиса
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            timestamp: 21.09.2026 14:31:02
+            status: 500
+            error: Internal Server Error
+            message: Внутренняя ошибка сервиса
+            path: /tickets
+
+    Conflict:
+      description: |
+        Операция конфликтует с текущим состоянием ресурса: билет был изменён или удалён
+        параллельным запросом, либо билет забронирован (`personId != null`) и не может
+        быть удалён до отмены бронирования.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            timestamp: 21.09.2026 14:31:02
+            status: 409
+            error: Conflict
+            message: Билет с id = 42 забронирован и не может быть удалён
+            path: /tickets/42
+
+    UnsupportedMediaType:
+      description: |
+        Тело запроса передано в формате, отличном от `application/json`,
+        либо заголовок `Content-Type` не указан.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            timestamp: 21.09.2026 14:31:02
+            status: 415
+            error: Unsupported Media Type
+            message: Тело запроса должно передаваться в формате application/json
+            path: /tickets
+
+    DefaultError:
+      description: |
+        Любая иная ошибка, не описанная отдельным кодом ответа. Тело ответа
+        содержит описание ошибки в том же формате, что и остальные ответы сервиса.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            timestamp: 21.09.2026 14:31:02
+            status: 503
+            error: Service Unavailable
+            message: Сервис временно недоступен
+            path: /tickets
