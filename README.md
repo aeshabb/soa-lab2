@@ -4,9 +4,6 @@
 
 Минимальный стек: Java 17, Jakarta REST (JAX-RS), JSON-P, Maven. Ticket Service работает на **WildFly 35.0.1.Final**, Booking Service и клиент — на **Payara 6.2025.1**. Клиент написан на HTML/CSS/JavaScript без отдельной сборки и внешних библиотек и включён в WAR второго сервиса.
 
-## Отчёт
-
-[Отчёт в Google Docs с титульным листом ИТМО](https://docs.google.com/document/d/1IKgBPHtGpj-PuJrO8lB3C6p4C3xipvASGDpLNSiT7Eo/edit). Поля ФИО, группы и преподавателя оставлены для заполнения.
 
 ## Развёрнуто на Helios
 
