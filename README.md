@@ -2,7 +2,7 @@
 
 Реализация варианта **Ticket / Booking** из [первой лабораторной](https://github.com/F4d4/ITMO_University/tree/main/soa/lab1). Исходные OpenAPI 3.0.3 спецификации сохранены без изменения в `spec/`. Числовой номер варианта в исходных файлах не указан.
 
-Минимальный стек: Java 17, Jakarta REST (JAX-RS), JSON-P, Maven. Ticket Service работает на **WildFly 35.0.1.Final**, Booking Service и клиент — на **Payara 6.2025.1**. Клиент написан на HTML/CSS/JavaScript без отдельной сборки и внешних библиотек и включён в WAR второго сервиса.
+Минимальный стек: Java 17, Jakarta REST (JAX-RS), JSON-P, JDBC, PostgreSQL, Maven. Ticket Service работает на **WildFly 35.0.1.Final**, Booking Service и клиент — на **Payara 6.2025.1**. Клиент написан на HTML/CSS/JavaScript без отдельной сборки и внешних библиотек и включён в WAR второго сервиса.
 
 
 ## Развёрнуто на Helios
@@ -74,7 +74,24 @@ bash ~/soa-lab2/deploy/stop.sh
 bash ~/soa-lab2/deploy/start.sh
 ```
 
-Ticket Service сохраняет коллекцию в `~/soa-lab2/.runtime/tickets.json` атомарной заменой файла. Данные переживают остановку, повторный запуск и обновление WAR. Логи: `~/soa-lab2/.runtime/wildfly.log` и `~/soa-lab2/runtime/payara6/glassfish/domains/domain1/logs/server.log`. Параметры и сгенерированные хранилища ключей находятся в закрытом каталоге `.runtime`, права — только владельцу. Автоматический запуск после перезагрузки Helios не настраивается.
+Ticket Service сохраняет билеты в PostgreSQL: сервер `pg:5432`, база `studs`, схема `s408256`. В таблице `soa_lab2_tickets` находятся отдельные столбцы `id`, `name`, `coordinate_x`, `coordinate_y`, `creation_date`, `price`, `comment`, `type`, `venue_id`, `person_id`. Площадки хранятся в `soa_lab2_venues` (`id`, `name`, `capacity`, `type`) и связаны с билетами внешним ключом `venue_id`. JSON/JSONB-столбцов нет. Типы столбцов и CHECK-ограничения соответствуют модели; дата хранится как `timestamp`, цена — `real`, координата Y — `double precision`, необязательные поля — SQL NULL. Таблица `soa_lab2_state` хранит следующие ID билета и площадки. Изменение билета, площадки и счётчиков выполняется в одной JDBC-транзакции; коллекция в памяти обновляется после успешного COMMIT и загружается из БД при запуске. Данные переживают остановку, повторный запуск и обновление WAR.
+
+`deploy/configure-postgres.py` создаёт отдельные таблицы в текущей схеме пользователя, один раз переносит прежний `tickets.json` и оставляет его резервную копию `tickets-before-postgres.json`. При обновлении промежуточного JSONB-хранилища данные переносятся в обычные столбцы одной транзакцией, а резервная копия сохраняется в `.runtime/tickets-before-relational.json`. Скрипт запускается при остановленном Ticket Service. После переноса сервис JSON-файл не обновляет. PostgreSQL JDBC-драйвер читает пароль из `~/.pgpass`; пароль не копируется в проект. Подключение задаётся переменными `TICKET_DATABASE_URL` и `TICKET_DATABASE_USER` в закрытом файле `.runtime/settings.sh`. Для другого аккаунта используются его схема и `~/.pgpass`; при необходимости перед настройкой можно задать `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`.
+
+Посмотреть билеты через `psql` на Helios:
+
+```sh
+psql -h pg -d studs -U s408256
+```
+
+```sql
+SELECT t.*, v.name AS venue_name, v.capacity, v.type AS venue_type
+FROM s408256.soa_lab2_tickets t
+JOIN s408256.soa_lab2_venues v ON v.id = t.venue_id
+ORDER BY t.id;
+```
+
+Логи: `~/soa-lab2/.runtime/wildfly.log` и `~/soa-lab2/runtime/payara6/glassfish/domains/domain1/logs/server.log`. Параметры и сгенерированные хранилища ключей находятся в закрытом каталоге `.runtime`, права — только владельцу. Автоматический запуск после перезагрузки Helios не настраивается.
 
 Для другого аккаунта при первой установке задайте свободные порты переменными `TICKET_HTTPS_PORT`, `BOOKING_HTTPS_PORT`, `WILDFLY_ADMIN_PORT`, `PAYARA_ADMIN_PORT` перед запуском `install.sh` и измените параметры туннеля.
 
@@ -98,7 +115,7 @@ python3 tests/api_smoke.py \
 
 ```text
 common/           JSON, валидация и формат ошибок
-ticket-service/   JAX-RS API, выборки, файловое хранилище
+ticket-service/   JAX-RS API, выборки, PostgreSQL-хранилище
 booking-service/  JAX-RS API, HTTPS-клиент первого сервиса, веб-клиент
 spec/             исходные спецификации первой лабораторной
 deploy/           установка, запуск, остановка и передача WAR

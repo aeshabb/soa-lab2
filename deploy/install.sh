@@ -45,7 +45,6 @@ export BOOKING_HTTPS_PORT='$BOOKING_HTTPS_PORT'
 export WILDFLY_ADMIN_PORT='$WILDFLY_ADMIN_PORT'
 export PAYARA_ADMIN_PORT='$PAYARA_ADMIN_PORT'
 export TICKET_SERVICE_URL='https://localhost:$TICKET_HTTPS_PORT'
-export TICKET_DATA_FILE='$LAB_HOME/.runtime/tickets.json'
 export TICKET_TRUSTSTORE='$LAB_HOME/.runtime/ticket-trust.p12'
 export TICKET_TRUSTSTORE_PASSWORD='$KEYSTORE_PASSWORD'
 EOF
@@ -68,5 +67,6 @@ stop-embedded-server
 EOF
 JAVA_OPTS='-Xmx256m -XX:ActiveProcessorCount=2' "$WF/bin/jboss-cli.sh" --file="$LAB_HOME/.runtime/configure-wildfly.cli"
 "$PYTHON" "$LAB_HOME/deploy/configure-payara.py" "$PAYARA/glassfish/domains/domain1/config/domain.xml" "$BOOKING_HTTPS_PORT" "$PAYARA_ADMIN_PORT"
+"$PYTHON" "$LAB_HOME/deploy/configure-postgres.py" "$LAB_HOME"
 touch "$LAB_HOME/.runtime/configured"
 echo 'Настройка завершена. Скопируйте WAR в artifacts/ и запустите deploy/start.sh.'
