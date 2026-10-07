@@ -1,6 +1,7 @@
 package ru.itmo.soa;
 
 import jakarta.json.*;
+import jakarta.json.stream.JsonParser;
 import jakarta.ws.rs.core.Response;
 import java.io.StringReader;
 import java.time.LocalDateTime;
@@ -17,8 +18,11 @@ public final class Api {
     }
     public static JsonObject object(String body) {
         if (body == null || body.isBlank()) throw new Fault(400, "Требуется JSON-объект");
-        try (JsonReader reader = Json.createReader(new StringReader(body))) {
-            return reader.readObject();
+        try (JsonParser parser = Json.createParser(new StringReader(body))) {
+            if (parser.next() != JsonParser.Event.START_OBJECT) throw new Fault(400, "Требуется JSON-объект");
+            JsonObject value = parser.getObject();
+            if (parser.hasNext()) throw new Fault(400, "После JSON-объекта не должно быть других данных");
+            return value;
         } catch (JsonException | IllegalStateException e) { throw new Fault(400, "Некорректный JSON-объект"); }
     }
     public static int positiveId(String raw, String field) {

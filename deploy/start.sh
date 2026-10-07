@@ -18,7 +18,24 @@ for ((i=0;i<90;i++)); do
   sleep 1
 done
 [[ "$ready" == true ]] || { echo 'WildFly не запустился. См. .runtime/wildfly.log'; exit 1; }
-"$PAYARA/bin/asadmin" --port "$PAYARA_ADMIN_PORT" start-domain domain1
-"$PAYARA/bin/asadmin" --port "$PAYARA_ADMIN_PORT" deploy --force=true --contextroot / --name booking-service "$LAB_HOME/artifacts/booking-service.war"
+if ! curl -s --max-time 2 --output /dev/null "http://localhost:$PAYARA_ADMIN_PORT"; then
+  "$PAYARA/bin/asadmin" --port "$PAYARA_ADMIN_PORT" start-domain domain1
+fi
+applications=$("$PAYARA/bin/asadmin" --terse=true --port "$PAYARA_ADMIN_PORT" list-applications)
+if awk '$1 == "booking-service" { found = 1 } END { exit !found }' <<< "$applications"; then
+  # Горячий --force оставляет старый модуль в корневом контексте Payara.
+  # Убираем регистрацию и запускаем домен заново перед установкой WAR.
+  "$PAYARA/bin/asadmin" --port "$PAYARA_ADMIN_PORT" undeploy booking-service
+  payara_pid=$(< "$PAYARA/glassfish/domains/domain1/config/pid")
+  "$PAYARA/bin/asadmin" --port "$PAYARA_ADMIN_PORT" stop-domain domain1
+  # Ждём завершения процесса перед запуском нового JVM.
+  for ((i=0;i<30;i++)); do
+    kill -0 "$payara_pid" 2>/dev/null || break
+    sleep 1
+  done
+  if kill -0 "$payara_pid" 2>/dev/null; then echo 'Payara ещё не завершилась'; exit 1; fi
+  "$PAYARA/bin/asadmin" --port "$PAYARA_ADMIN_PORT" start-domain domain1
+fi
+"$PAYARA/bin/asadmin" --port "$PAYARA_ADMIN_PORT" deploy --contextroot / --name booking-service "$LAB_HOME/artifacts/booking-service.war"
 echo "Ticket API: https://helios.cs.ifmo.ru:$TICKET_HTTPS_PORT/tickets"
 echo "Клиент и Booking API: https://helios.cs.ifmo.ru:$BOOKING_HTTPS_PORT/"

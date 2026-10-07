@@ -4,7 +4,6 @@ import jakarta.inject.Inject;
 import jakarta.json.*;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.Response;
-import java.net.URI;
 import java.util.*;
 import ru.itmo.soa.*;
 
@@ -29,7 +28,7 @@ public class Booking {
         input = Json.createObjectBuilder(input).add("price",(double)price).add("type","VIP").add("personId",person).build();
         JsonObject created = tickets.operation("POST","/tickets",input,201);
         if (!created.containsKey("id")) throw new Fault(502,"Ticket Service не вернул идентификатор билета");
-        return Response.created(URI.create("/tickets/"+created.getInt("id"))).type("application/json").entity(created.toString()).build();
+        return Response.created(tickets.ticketUri(created.getInt("id"))).type("application/json").entity(created.toString()).build();
     }
     @POST @Path("/person/{person-id}/cancel")
     public Response cancel(@PathParam("person-id") String rawPerson) {

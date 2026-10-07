@@ -21,7 +21,7 @@ public class TicketProxy {
     }
     @GET public Response list() { return relay("GET","",null,null); }
     @POST public Response create(String body,@HeaderParam("Content-Type") String type) { return relay("POST","",body,type); }
-    @GET @Path("/{tail: .+}") public Response get(@PathParam("tail") String tail) { return relay("GET","/"+tail,null,null); }
-    @PUT @Path("/{tail: .+}") public Response update(@PathParam("tail") String tail,String body,@HeaderParam("Content-Type") String type) { return relay("PUT","/"+tail,body,type); }
-    @DELETE @Path("/{tail: .+}") public Response delete(@PathParam("tail") String tail) { return relay("DELETE","/"+tail,null,null); }
+    @GET @Path("/{tail: .+}") public Response get(@Encoded @PathParam("tail") String tail) { return relay("GET","/"+tail,null,null); }
+    @PUT @Path("/{tail: .+}") public Response update(@Encoded @PathParam("tail") String tail,String body,@HeaderParam("Content-Type") String type) { return relay("PUT","/"+tail,body,type); }
+    @DELETE @Path("/{tail: .+}") public Response delete(@Encoded @PathParam("tail") String tail) { return relay("DELETE","/"+tail,null,null); }
 }

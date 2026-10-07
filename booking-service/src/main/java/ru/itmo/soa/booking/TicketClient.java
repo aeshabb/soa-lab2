@@ -29,6 +29,7 @@ public class TicketClient {
             client = HttpClient.newBuilder().sslContext(context).connectTimeout(Duration.ofSeconds(5)).build();
         } catch (Exception e) { throw new IllegalStateException("Не удалось загрузить сертификат Ticket Service",e); }
     }
+    public URI ticketUri(int id) { return URI.create(base + "/tickets/" + id); }
     public HttpResponse<String> request(String method, String path, String body, String type) {
         HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(base + path)).timeout(Duration.ofSeconds(15)).header("Accept","application/json");
         if (type != null) request.header("Content-Type",type);

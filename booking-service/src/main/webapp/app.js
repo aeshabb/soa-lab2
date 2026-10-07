@@ -82,7 +82,7 @@ function query(){
   if($('sorts').children.length)params.set('sort',[...$('sorts').children].map(row=>row.parameter()).join(','));
   return params.toString();
 }
-function money(value){return new Intl.NumberFormat('ru-RU',{maximumFractionDigits:8}).format(value);}
+function money(value){return new Intl.NumberFormat('ru-RU',{maximumFractionDigits:8,notation:value!==0&&Math.abs(value)<1e-8?'scientific':'standard'}).format(value);}
 function display(value){return value==null?'Не указан':String(value);}
 async function load(){
   const data=await api(`${ticketUrl}?${query()}`);$('tickets').replaceChildren();
