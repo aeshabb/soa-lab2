@@ -42,27 +42,34 @@ await context.action(async()=>context.api('/booking/person/7/cancel','POST'))({
 assert.equal(node('result').children.length,0,'stale successful result must disappear');
 const notice=node('cancel').children[0];
 assert.equal(notice.className,'message error');
-assert.match(notice.textContent,/Нет соединения/);
-assert.match(notice.textContent,/Результат операции неизвестен/);
+assert.match(notice.textContent,/Сервис временно недоступен/);
+assert.match(notice.textContent,/Не удалось подтвердить результат/);
+assert.doesNotMatch(notice.textContent,/Payara|WildFly|SSH|HTTP|Ticket Service/);
 
 for(const status of [502,503,504]){
   fetchImpl=async()=>response(status,{status,message:'Ticket Service недоступен'});
   await assert.rejects(context.api('/booking/person/7/cancel','POST'),new RegExp('Ошибка '+status));
+  await assert.rejects(context.api('/client-api/tickets'),error=>{
+    assert.match(error.message,new RegExp('Ошибка '+status));
+    assert.match(error.message,/Попробуйте ещё раз позже/);
+    assert.doesNotMatch(error.message,/Payara|WildFly|SSH|Ticket Service/);
+    return true;
+  });
 }
 fetchImpl=async()=>response(204,null);
-await assert.rejects(context.api('/booking/person/7/cancel','POST'),/пустой ответ/);
+await assert.rejects(context.api('/booking/person/7/cancel','POST'),/подтверждение \(HTTP 204\)/);
 assert.equal(await context.api('/client-api/tickets/7','DELETE'),null);
 fetchImpl=async()=>({status:200,ok:true,json:async()=>{throw new SyntaxError('HTML');}});
-await assert.rejects(context.api('/client-api/tickets'),/нечитаемый ответ/);
+await assert.rejects(context.api('/client-api/tickets'),/Не удалось получить результат \(HTTP 200\)/);
 fetchImpl=async()=>response(200,null);
-await assert.rejects(context.api('/client-api/tickets'),/не вернул результат/);
+await assert.rejects(context.api('/client-api/tickets'),/Не удалось получить результат/);
 
 fetchImpl=(_,options)=>new Promise((resolve,reject)=>{
   options.signal.addEventListener('abort',()=>reject(new Error('aborted')),{once:true});
 });
 const pending=context.api('/booking/person/7/cancel','POST');
 onTimeout();
-await assert.rejects(pending,/30 секунд/);
+await assert.rejects(pending,/Не удалось дождаться ответа/);
 assert.equal(onTimeout,undefined,'the timer must be cleared after failure');
 
 fetchImpl=async()=>response(502,{message:'Ticket Service недоступен'});

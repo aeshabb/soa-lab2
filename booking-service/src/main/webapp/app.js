@@ -44,21 +44,25 @@ async function api(path,method='GET',body) {
   try {
     let response;
     try { response=await fetch(path,options); } catch {
-      const detail=controller.signal.aborted?'Сервер не ответил за 30 секунд.':'Нет соединения с сервером приложения (Payara). Проверьте, что сервер и SSH-туннель запущены.';
-      throw new Error(detail+(method==='GET'?'':' Результат операции неизвестен. Перед повтором проверьте данные.'));
+      const detail=controller.signal.aborted?'Не удалось дождаться ответа.':'Сервис временно недоступен.';
+      throw new Error(detail+(method==='GET'?' Попробуйте ещё раз позже.':' Не удалось подтвердить результат. Перед повторной попыткой обновите список билетов.'));
     }
     if(response.status===204){
       if(method==='DELETE')return null;
-      throw new Error('Сервис вернул пустой ответ вместо результата операции (HTTP 204).');
+      throw new Error('Не удалось получить подтверждение (HTTP 204). Обновите список билетов перед повторной попыткой.');
+    }
+    if(response.status>=500){
+      const detail=response.status===504?'Не удалось дождаться ответа.':'Сервис временно недоступен.';
+      throw new Error(`Ошибка ${response.status}. ${detail}`+(method==='GET'?' Попробуйте ещё раз позже.':' Не удалось подтвердить результат. Перед повторной попыткой обновите список билетов.'));
     }
     let data;
-    try{data=await response.json();}catch{throw new Error(`Сервис вернул неполный или нечитаемый ответ (HTTP ${response.status}).`);}
+    try{data=await response.json();}catch{throw new Error(`Не удалось получить результат (HTTP ${response.status}). Обновите список билетов и попробуйте ещё раз.`);}
     if(!response.ok){
       const violations=(data?.violations||[]).map(v=>`${fieldLabels[v.field]||v.field}: ${v.message}`).join('\n');
-      const error=new Error(`Ошибка ${response.status}: ${data?.message||data?.error||'Не удалось выполнить запрос'}${violations?'\n'+violations:''}`);
+      const error=new Error(`Ошибка ${response.status}. ${data?.message||'Не удалось выполнить действие. Проверьте введённые данные.'}${violations?'\n'+violations:''}`);
       error.violations=data?.violations;throw error;
     }
-    if(data===null||typeof data!=='object')throw new Error('Сервис не вернул результат операции.');
+    if(data===null||typeof data!=='object')throw new Error(`Не удалось получить результат (HTTP ${response.status}). Обновите список билетов и попробуйте ещё раз.`);
     return data;
   } finally { clearTimeout(timer); }
 }
