@@ -37,22 +37,36 @@ function showError(error,scope) {
   message(error.message,true,scope);
 }
 async function api(path,method='GET',body) {
-  const options={method,headers:{Accept:'application/json'}};
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),30000);
+  const options={method,headers:{Accept:'application/json'},cache:'no-store',signal:controller.signal};
   if(body!==undefined){options.headers['Content-Type']='application/json';options.body=JSON.stringify(body);}
-  let response;
-  try { response=await fetch(path,options); } catch { throw new Error('Нет соединения с сервером. Проверьте доступ к HTTPS-адресу.'); }
-  if(response.status===204)return null;
-  let data;try{data=await response.json();}catch{throw new Error(`Сервис вернул нечитаемый ответ (HTTP ${response.status}).`);}
-  if(!response.ok){
-    const violations=(data.violations||[]).map(v=>`${fieldLabels[v.field]||v.field}: ${v.message}`).join('\n');
-    const error=new Error(`Ошибка ${response.status}: ${data.message||data.error||'Не удалось выполнить запрос'}${violations?'\n'+violations:''}`);
-    error.violations=data.violations;throw error;
-  }return data;
+  try {
+    let response;
+    try { response=await fetch(path,options); } catch {
+      const detail=controller.signal.aborted?'Сервер не ответил за 30 секунд.':'Нет соединения с сервером приложения (Payara). Проверьте, что сервер и SSH-туннель запущены.';
+      throw new Error(detail+(method==='GET'?'':' Результат операции неизвестен. Перед повтором проверьте данные.'));
+    }
+    if(response.status===204){
+      if(method==='DELETE')return null;
+      throw new Error('Сервис вернул пустой ответ вместо результата операции (HTTP 204).');
+    }
+    let data;
+    try{data=await response.json();}catch{throw new Error(`Сервис вернул неполный или нечитаемый ответ (HTTP ${response.status}).`);}
+    if(!response.ok){
+      const violations=(data?.violations||[]).map(v=>`${fieldLabels[v.field]||v.field}: ${v.message}`).join('\n');
+      const error=new Error(`Ошибка ${response.status}: ${data?.message||data?.error||'Не удалось выполнить запрос'}${violations?'\n'+violations:''}`);
+      error.violations=data?.violations;throw error;
+    }
+    if(data===null||typeof data!=='object')throw new Error('Сервис не вернул результат операции.');
+    return data;
+  } finally { clearTimeout(timer); }
 }
 function action(task){return async function(event){
   event?.preventDefault();const source=event?.currentTarget||this;
   const scope=source?.closest?.('form')||source?.closest?.('section')||$('selection');
-  clearFeedback(scope);try{await task(scope);}catch(e){showError(e,scope);}
+  clearFeedback(scope);$('result').replaceChildren();
+  try{await task(scope);}catch(e){showError(e,scope);}
 };}
 function appendField(parent,label,node){const wrapper=el('label',label);wrapper.append(node);parent.append(wrapper);}
 function filterRow(){
@@ -85,7 +99,13 @@ function query(){
 function money(value){return new Intl.NumberFormat('ru-RU',{maximumFractionDigits:8,notation:value!==0&&Math.abs(value)<1e-8?'scientific':'standard'}).format(value);}
 function display(value){return value==null?'Не указан':String(value);}
 async function load(){
-  const data=await api(`${ticketUrl}?${query()}`);$('tickets').replaceChildren();
+  let data;
+  try { data=await api(`${ticketUrl}?${query()}`); }
+  catch(error){
+    $('tickets').replaceChildren();$('page-info').textContent='Не удалось загрузить актуальную коллекцию.';
+    $('previous').disabled=true;$('next').disabled=true;throw error;
+  }
+  $('tickets').replaceChildren();
   for(const t of data.items){
     const row=el('tr');
     const values=[t.id,`${t.name}\n${ticketTypes[t.type]}`,`X: ${t.coordinates.x}\nY: ${t.coordinates.y}`,t.creationDate,money(t.price),t.comment??'Без комментария',`${t.venue.name}\nID: ${t.venue.id} · ${venueTypes[t.venue.type]??'Тип не указан'}\nВместимость: ${t.venue.capacity}`,t.personId==null?'Свободен':`Человек №${t.personId}`];
@@ -95,6 +115,11 @@ async function load(){
   if(!data.items.length){const row=el('tr'),cell=el('td','Билетов по заданным условиям нет.');cell.colSpan=9;row.append(cell);$('tickets').append(row);}
   $('page-info').textContent=`Страница ${data.page}; всего страниц: ${data.totalPages}; найдено билетов: ${data.totalElements}.`;
   $('previous').disabled=data.page<=1;$('next').disabled=data.page>=data.totalPages;
+}
+async function refreshAfterMutation(){
+  // The mutation has already succeeded. A failed refresh is a separate error.
+  clearFeedback($('selection'));
+  try { await load(); } catch(error) { showError(error,$('selection')); }
 }
 function resetEditor(){
   clearFeedback($('editor'));
@@ -126,12 +151,12 @@ $('reset-selection').onclick=action(async()=>{$('filters').replaceChildren();$('
 $('previous').onclick=action(async()=>{$('page').value=Number($('page').value)-1;await load();});
 $('next').onclick=action(async()=>{$('page').value=Number($('page').value)+1;await load();});
 $('lookup').onsubmit=action(()=>lookup($('lookup-id').value));$('new-ticket').onclick=resetEditor;
-$('editor').onsubmit=action(async scope=>{const t=await api(editingId===null?ticketUrl:`${ticketUrl}/${editingId}`,editingId===null?'POST':'PUT',inputTicket());showTicket(t,'Сохранённый билет');resetEditor();message(`Билет №${t.id} сохранён.`,false,scope);await load();});
-$('delete-ticket').onclick=action(async scope=>{if(!confirm(`Удалить билет №${editingId}?`))return;await api(`${ticketUrl}/${editingId}`,'DELETE');resetEditor();message('Билет удалён.',false,scope);await load();});
+$('editor').onsubmit=action(async scope=>{const t=await api(editingId===null?ticketUrl:`${ticketUrl}/${editingId}`,editingId===null?'POST':'PUT',inputTicket());showTicket(t,'Сохранённый билет');resetEditor();message(`Билет №${t.id} сохранён.`,false,scope);await refreshAfterMutation();});
+$('delete-ticket').onclick=action(async scope=>{if(!confirm(`Удалить билет №${editingId}?`))return;await api(`${ticketUrl}/${editingId}`,'DELETE');resetEditor();message('Билет удалён.',false,scope);await refreshAfterMutation();});
 $('average').onclick=action(async()=>{const r=await api(`${ticketUrl}/price/average`);$('result').replaceChildren(el('h3','Средняя цена'),el('p',`${money(r.average)}; билетов в расчёте: ${r.count}.`));});
 $('min-comment').onclick=action(async()=>showTicket(await api(`${ticketUrl}/comment/min`),'Билет с минимальным комментарием'));
-$('delete-price').onsubmit=action(async scope=>{const price=$('delete-price').elements.namedItem('price').value;if(!confirm(`Удалить один свободный билет с ценой ${price}?`))return;showTicket(await api(`${ticketUrl}/price/${encodeURIComponent(price)}`,'DELETE'),'Удалённый билет');message('Один свободный билет удалён.',false,scope);await load();});
-$('vip').onsubmit=action(async scope=>{const f=$('vip').elements;showTicket(await api(`/booking/sell/vip/${encodeURIComponent(f.namedItem('ticket').value)}/${encodeURIComponent(f.namedItem('person').value)}`,'POST'),'Проданная VIP-копия');message('VIP-копия создана и закреплена за человеком.',false,scope);await load();});
-$('cancel').onsubmit=action(async scope=>{const person=$('cancel').elements.namedItem('person').value;const r=await api(`/booking/person/${encodeURIComponent(person)}/cancel`,'POST');$('result').replaceChildren(el('h3','Отмена бронирований'),el('p',`Человек №${r.personId}: отменено ${r.cancelledCount} бронирований. Билеты: ${r.cancelledTicketIds.join(', ')||'нет'}.`));message('Отмена бронирований выполнена.',false,scope);await load();});
+$('delete-price').onsubmit=action(async scope=>{const price=$('delete-price').elements.namedItem('price').value;if(!confirm(`Удалить один свободный билет с ценой ${price}?`))return;showTicket(await api(`${ticketUrl}/price/${encodeURIComponent(price)}`,'DELETE'),'Удалённый билет');message('Один свободный билет удалён.',false,scope);await refreshAfterMutation();});
+$('vip').onsubmit=action(async scope=>{const f=$('vip').elements;showTicket(await api(`/booking/sell/vip/${encodeURIComponent(f.namedItem('ticket').value)}/${encodeURIComponent(f.namedItem('person').value)}`,'POST'),'Проданная VIP-копия');message('VIP-копия создана и закреплена за человеком.',false,scope);await refreshAfterMutation();});
+$('cancel').onsubmit=action(async scope=>{const person=$('cancel').elements.namedItem('person').value;const r=await api(`/booking/person/${encodeURIComponent(person)}/cancel`,'POST');$('result').replaceChildren(el('h3','Отмена бронирований'),el('p',`Человек №${r.personId}: отменено ${r.cancelledCount} бронирований. Билеты: ${r.cancelledTicketIds.join(', ')||'нет'}.`));message('Отмена бронирований выполнена.',false,scope);await refreshAfterMutation();});
 document.addEventListener('input',event=>{if(event.target.getAttribute('aria-invalid')==='true')clearFieldError(event.target);});
 action(load)();
