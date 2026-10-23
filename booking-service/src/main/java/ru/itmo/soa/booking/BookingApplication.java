@@ -8,5 +8,5 @@ import ru.itmo.soa.NoCache;
 
 @ApplicationPath("/")
 public class BookingApplication extends Application {
-    @Override public Set<Class<?>> getClasses() { return Set.of(Booking.class, TicketProxy.class, ClientPage.class, Errors.class, NoCache.class); }
+    @Override public Set<Class<?>> getClasses() { return Set.of(Booking.class, Errors.class, NoCache.class); }
 }

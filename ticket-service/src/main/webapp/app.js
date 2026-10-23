@@ -1,6 +1,6 @@
 'use strict';
 const $ = id => document.getElementById(id);
-const ticketUrl = '/client-api/tickets';
+const ticketUrl = '/tickets';
 const labels = {id:'ID',name:'Название',coordinateX:'Координата X',coordinateY:'Координата Y',creationDate:'Дата создания',price:'Цена',comment:'Комментарий',type:'Тип билета',venueId:'ID места',venueName:'Название места',venueCapacity:'Вместимость',venueType:'Тип места',personId:'ID человека'};
 const fieldNames = {'coordinates.x':'x','coordinates.y':'y','venue.name':'venueName','venue.capacity':'capacity','venue.type':'venueType'};
 const fieldLabels = {...labels,'coordinates.x':labels.coordinateX,'coordinates.y':labels.coordinateY,'venue.name':labels.venueName,'venue.capacity':labels.venueCapacity,'venue.type':labels.venueType};
@@ -160,7 +160,7 @@ $('delete-ticket').onclick=action(async scope=>{if(!confirm(`Удалить би
 $('average').onclick=action(async()=>{const r=await api(`${ticketUrl}/price/average`);$('result').replaceChildren(el('h3','Средняя цена'),el('p',`${money(r.average)}; билетов в расчёте: ${r.count}.`));});
 $('min-comment').onclick=action(async()=>showTicket(await api(`${ticketUrl}/comment/min`),'Билет с минимальным комментарием'));
 $('delete-price').onsubmit=action(async scope=>{const price=$('delete-price').elements.namedItem('price').value;if(!confirm(`Удалить один свободный билет с ценой ${price}?`))return;showTicket(await api(`${ticketUrl}/price/${encodeURIComponent(price)}`,'DELETE'),'Удалённый билет');message('Один свободный билет удалён.',false,scope);await refreshAfterMutation();});
-$('vip').onsubmit=action(async scope=>{const f=$('vip').elements;showTicket(await api(`/booking/sell/vip/${encodeURIComponent(f.namedItem('ticket').value)}/${encodeURIComponent(f.namedItem('person').value)}`,'POST'),'Проданная VIP-копия');message('VIP-копия создана и закреплена за человеком.',false,scope);await refreshAfterMutation();});
-$('cancel').onsubmit=action(async scope=>{const person=$('cancel').elements.namedItem('person').value;const r=await api(`/booking/person/${encodeURIComponent(person)}/cancel`,'POST');$('result').replaceChildren(el('h3','Отмена бронирований'),el('p',`Человек №${r.personId}: отменено ${r.cancelledCount} бронирований. Билеты: ${r.cancelledTicketIds.join(', ')||'нет'}.`));message('Отмена бронирований выполнена.',false,scope);await refreshAfterMutation();});
+$('vip').onsubmit=action(async scope=>{const f=$('vip').elements;showTicket(await api(`/client-api/booking/sell/vip/${encodeURIComponent(f.namedItem('ticket').value)}/${encodeURIComponent(f.namedItem('person').value)}`,'POST'),'Проданная VIP-копия');message('VIP-копия создана и закреплена за человеком.',false,scope);await refreshAfterMutation();});
+$('cancel').onsubmit=action(async scope=>{const person=$('cancel').elements.namedItem('person').value;const r=await api(`/client-api/booking/person/${encodeURIComponent(person)}/cancel`,'POST');$('result').replaceChildren(el('h3','Отмена бронирований'),el('p',`Человек №${r.personId}: отменено ${r.cancelledCount} бронирований. Билеты: ${r.cancelledTicketIds.join(', ')||'нет'}.`));message('Отмена бронирований выполнена.',false,scope);await refreshAfterMutation();});
 document.addEventListener('input',event=>{if(event.target.getAttribute('aria-invalid')==='true')clearFieldError(event.target);});
 action(load)();

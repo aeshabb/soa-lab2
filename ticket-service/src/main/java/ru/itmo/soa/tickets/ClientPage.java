@@ -1,4 +1,4 @@
-package ru.itmo.soa.booking;
+package ru.itmo.soa.tickets;
 
 import jakarta.servlet.ServletContext;
 import jakarta.ws.rs.*;
