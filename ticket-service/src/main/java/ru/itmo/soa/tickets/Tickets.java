@@ -8,7 +8,7 @@ import java.net.URI;
 import java.util.*;
 import ru.itmo.soa.*;
 
-@Path("/tickets") @Produces("application/json")
+@Path("/") @Produces("application/json")
 public class Tickets {
     @Inject TicketStore store;
     @GET public Response list(@Context UriInfo uri) { return Api.json(200,Selection.page(store.all(),uri.getQueryParameters())); }

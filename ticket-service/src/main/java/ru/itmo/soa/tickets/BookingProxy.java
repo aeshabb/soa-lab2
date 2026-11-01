@@ -16,7 +16,7 @@ import ru.itmo.soa.Fault;
 
 // Клиент остаётся на WildFly; только операции бронирования требуют Payara.
 @ApplicationScoped
-@Path("/client-api/booking") @Produces("application/json")
+@Path("/booking") @Produces("application/json")
 public class BookingProxy {
     private HttpClient client;
     private String base;

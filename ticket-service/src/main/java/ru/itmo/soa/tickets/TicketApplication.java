@@ -4,9 +4,8 @@ import jakarta.ws.rs.ApplicationPath;
 import jakarta.ws.rs.core.Application;
 import java.util.Set;
 import ru.itmo.soa.Errors;
-import ru.itmo.soa.NoCache;
 
-@ApplicationPath("/")
+@ApplicationPath("/tickets")
 public class TicketApplication extends Application {
-    @Override public Set<Class<?>> getClasses() { return Set.of(Tickets.class, ClientPage.class, BookingProxy.class, Errors.class, NoCache.class); }
+    @Override public Set<Class<?>> getClasses() { return Set.of(Tickets.class, Errors.class); }
 }
