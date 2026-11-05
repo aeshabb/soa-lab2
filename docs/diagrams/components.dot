@@ -1,0 +1,42 @@
+digraph Components {
+  graph [rankdir=TB, bgcolor="white", fontname="Liberation Sans", fontsize=16,
+         nodesep=0.65, ranksep=0.65, pad=0.15, compound=true, newrank=true];
+  node [shape=box, style="rounded,filled", fillcolor="white", color="#728096",
+        fontname="Liberation Sans", fontsize=13, margin="0.18,0.12"];
+  edge [fontname="Liberation Sans", fontsize=11, color="#34465b", arrowsize=0.8];
+
+  Browser [label="Браузер\nHTML + CSS + app.js\nJavaScript выполняет fetch()", fillcolor="#f1f5f9"];
+
+  subgraph cluster_ticket {
+    label="ticket-service.war  |  WildFly 35.0.1.Final";
+    style="rounded,filled"; fillcolor="#f1f7fe"; color="#91b5de";
+    Static [label="Стандартный сервлет\n/, /index.html\n/app.js, /style.css"];
+    Tickets [label="Ticket API\nTickets + TicketStore\n/tickets/..."];
+    Proxy [label="BookingProxy\n/client-api/booking/..."];
+    { rank=same; Static; Tickets; Proxy; }
+    Static -> Tickets -> Proxy [style=invis];
+  }
+
+  subgraph cluster_booking {
+    label="booking-service.war  |  Payara 6.2025.1";
+    labelloc=b;
+    style="rounded,filled"; fillcolor="#effaf5"; color="#86bda5";
+    Booking [label="Booking\nVIP-копия / отмена\n/booking/..."];
+    TicketClient [label="TicketClient\nHTTPS-клиент Ticket API"];
+    { rank=same; Booking; TicketClient; }
+    Booking -> TicketClient [label="Java-вызов"];
+  }
+
+  Database [shape=cylinder, label="PostgreSQL: pg:5432\nБаза studs, схема s408256\nsoa_lab2_tickets\nsoa_lab2_venues\nsoa_lab2_state", fillcolor="#fff8e9", color="#c6a15d"];
+  Common [label="common-1.0.jar\nApi · Validation · Fault\nErrors · NoCache", fillcolor="#f4f1fa", color="#aa98c4"];
+
+  Browser -> Static [label="HTTPS GET\nфайлы"];
+  Browser -> Tickets [label="HTTPS / JSON\nCRUD, выборки"];
+  Browser -> Proxy [label="HTTPS POST\nBooking"];
+  Proxy -> Booking [label="HTTPS POST /booking/...\nпорт 29256", color="#307d5b", fontcolor="#307d5b"];
+  TicketClient -> Tickets [label="HTTPS GET / POST / PUT\n/tickets/...", color="#307d5b", fontcolor="#307d5b", constraint=false];
+  Tickets -> Database [label="JDBC / SQL\nтолько TicketStore"];
+  { rank=same; Database; Booking; TicketClient; }
+  Tickets -> Common [style=dashed, color="#8c79a7", label="зависимость модуля", ltail=cluster_ticket];
+  Booking -> Common [style=dashed, color="#8c79a7", label="зависимость модуля", ltail=cluster_booking];
+}

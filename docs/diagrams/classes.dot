@@ -1,0 +1,61 @@
+digraph Classes {
+  graph [rankdir=TB, bgcolor="white", fontname="Liberation Sans", fontsize=16,
+         nodesep=0.42, ranksep=0.55, pad=0.15, newrank=true, splines=polyline];
+  node [shape=plain, fontname="Liberation Sans", fontsize=12];
+  edge [fontname="Liberation Sans", fontsize=11, color="#34465b", arrowsize=0.8, arrowhead=vee];
+
+  subgraph cluster_ticket {
+    label="ticket-service / ru.itmo.soa.tickets";
+    style="rounded,filled"; fillcolor="#f1f7fe"; color="#91b5de"; margin=16;
+    Tickets [label=<
+      <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="8" COLOR="#728096" BGCOLOR="white">
+        <TR><TD><B>Tickets</B></TD></TR>
+        <TR><TD ALIGN="LEFT">~ store: TicketStore</TD></TR>
+        <TR><TD ALIGN="LEFT">+ list()<BR ALIGN="LEFT"/>+ create() / get()<BR ALIGN="LEFT"/>+ update() / delete()<BR ALIGN="LEFT"/>+ deletePrice()<BR ALIGN="LEFT"/>+ average() / minimum()<BR ALIGN="LEFT"/></TD></TR>
+      </TABLE>>];
+    BookingProxy [label=<
+      <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="8" COLOR="#728096" BGCOLOR="white">
+        <TR><TD><B>BookingProxy</B></TD></TR>
+        <TR><TD ALIGN="LEFT">- client: HttpClient<BR ALIGN="LEFT"/>- base: String<BR ALIGN="LEFT"/></TD></TR>
+        <TR><TD ALIGN="LEFT">+ sell()<BR ALIGN="LEFT"/>+ cancel()<BR ALIGN="LEFT"/>- relay()<BR ALIGN="LEFT"/></TD></TR>
+      </TABLE>>];
+    TicketStore [label=<
+      <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="8" COLOR="#728096" BGCOLOR="white">
+        <TR><TD><B>TicketStore</B></TD></TR>
+        <TR><TD ALIGN="LEFT">- tickets: Map&lt;Integer, JsonObject&gt;<BR ALIGN="LEFT"/>- nextTicketId / nextVenueId: long<BR ALIGN="LEFT"/></TD></TR>
+        <TR><TD ALIGN="LEFT">+ all() / get()<BR ALIGN="LEFT"/>+ create() / update()<BR ALIGN="LEFT"/>+ delete() / deletePrice()<BR ALIGN="LEFT"/>- save()<BR ALIGN="LEFT"/></TD></TR>
+      </TABLE>>];
+    Selection [label=<
+      <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="8" COLOR="#728096" BGCOLOR="white">
+        <TR><TD>&lt;&lt;utility&gt;&gt;<BR/><B>Selection</B></TD></TR>
+        <TR><TD ALIGN="LEFT">+ page() [static]</TD></TR>
+      </TABLE>>];
+    { rank=same; Tickets; BookingProxy; }
+    { rank=same; TicketStore; Selection; }
+    Tickets -> TicketStore [label="@Inject store"];
+    Tickets -> Selection [style=dashed, label="list() вызывает"];
+  }
+
+  subgraph cluster_booking {
+    label="booking-service / ru.itmo.soa.booking";
+    style="rounded,filled"; fillcolor="#effaf5"; color="#86bda5"; margin=16;
+    Booking [label=<
+      <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="8" COLOR="#728096" BGCOLOR="white">
+        <TR><TD><B>Booking</B></TD></TR>
+        <TR><TD ALIGN="LEFT">~ tickets: TicketClient</TD></TR>
+        <TR><TD ALIGN="LEFT">+ sell()<BR ALIGN="LEFT"/>+ cancel()<BR ALIGN="LEFT"/></TD></TR>
+      </TABLE>>];
+    TicketClient [label=<
+      <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="8" COLOR="#728096" BGCOLOR="white">
+        <TR><TD><B>TicketClient</B></TD></TR>
+        <TR><TD ALIGN="LEFT">- client: HttpClient<BR ALIGN="LEFT"/>- base: String<BR ALIGN="LEFT"/></TD></TR>
+        <TR><TD ALIGN="LEFT">+ operation()<BR ALIGN="LEFT"/>+ request()<BR ALIGN="LEFT"/>+ ticketUri()<BR ALIGN="LEFT"/></TD></TR>
+      </TABLE>>];
+    Booking -> TicketClient [label="@Inject tickets"];
+  }
+
+  { rank=same; Tickets; BookingProxy; Booking; }
+  { rank=same; TicketStore; Selection; TicketClient; }
+  BookingProxy -> Booking [style=dashed, color="#307d5b", fontcolor="#307d5b", label="HTTPS\n/booking/...", constraint=false];
+  TicketClient -> Tickets [style=dashed, color="#307d5b", fontcolor="#307d5b", label="HTTPS /tickets/...", constraint=false];
+}

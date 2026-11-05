@@ -4,6 +4,12 @@
 
 Минимальный стек: Java 17, Jakarta REST (JAX-RS), JSON-P, JDBC, PostgreSQL, Maven. Ticket Service и клиент работают на **WildFly 35.0.1.Final**, Booking Service — на **Payara 6.2025.1**. Клиент написан на HTML/CSS/JavaScript без отдельной сборки и внешних библиотек и включён в WAR первого сервиса.
 
+## Диаграммы архитектуры
+
+[Взаимодействие модулей и основные классы](docs/architecture.md): две диаграммы,
+ответственность классов и разбор запросов таблицы, VIP-продажи и отмены бронирований.
+Редактируемые исходники Graphviz и изображения SVG находятся в `docs/diagrams/`.
+
 ## Почему не нужен ClientPage
 
 `index.html`, `app.js` и `style.css` лежат в `ticket-service/src/main/webapp`.
